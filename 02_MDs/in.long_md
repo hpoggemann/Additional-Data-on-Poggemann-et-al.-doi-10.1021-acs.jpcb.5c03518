@@ -1,0 +1,57 @@
+# input for Long MD simulation with 100 mols of plasmaspecies around enzyme
+# ReaxFF simulation with fixed Fe in the heme because Fe is not part of the ff
+
+units		real 						# Define unit sys -> real is vital for reax
+atom_style	full						# ReaxFF needs charge or full
+############### Read data ############### 
+read_data	data.Cvi_300K_vac 				# Structure file
+############### Reion plasma species ###############
+region 		ball sphere 0.0 0.0 0.0 30 side in
+############### All molecules ###############
+molecule        h2o2 h.mol					# Molecule that is added to system
+create_atoms    0 random 100 56743 ball mol h2o2 69752 &
+		overlap 1.0 maxtry 10000  			# Define amount and region to place mol
+############## Groups ###############
+group           heme id 3647 3648 3649 3650 3651 3720 	# Heme center Fe, and N
+group           S_cys id 309					# S_Cys connected to heme
+group           fix union heme S_cys				# Unite groups
+group           rest subtract all fix				# Rest of the system
+############### Force Filed ###############
+pair_style      reaxff NULL safezone 1.6  mincap 100  minhbonds 150
+pair_coeff      * * protein2013.ff H C N O S X X 		# ff, elements in the right order, X for Fe 
+fix             QEq all qeq/reax 1 0.0 10.0 1e-6 reaxff
+neighbor	2 bin
+neigh_modify	every 10 delay 0 check no
+############### Enviroment ###############
+fix		nve all nve 					# Thermodyn ensemble fix
+fix             langv all langevin 500.0 500.0 100.0 846321	# Thermostat fix
+############### Fix Fe and S ###############
+fix             freeze fix setforce 0.0 0.0 0.0
+velocity        fix set 0.0 0.0 0.0
+############### Thermolog ###############
+thermo		500  						# Saves thermo data all x iterations
+thermo_style	custom step time temp pe ke etotal & 
+		vol density 					# Define which parameters in thermo
+variable	step equal step 				# Make variable of parameter in thermo
+variable	time equal time
+variable	temp equal temp
+variable	pe equal pe
+variable	ke equal ke
+variable	etotal equal etotal
+variable	vol equal vol
+variable	density equal density
+################ Print thermolog ###############
+fix		thermolog1 all print 500 &
+		"${step} ${time} ${temp} ${pe} ${ke} ${etotal} ${vol} ${density}" &
+		file thermolog1 screen no title &
+		"#step time temp epot ekin etotal volume density"	# Saves the variables of thermo into an extra file
+############### Dump trajectory ###############
+dump		traj all custom 5000 traj.lmp id mol &
+		type element x y z vx vy vz q			# Trajecory files
+dump_modify	traj append yes element H C N O S Mg Fe 	# Name elements in dump file correctly 
+restart	100000 Cvi.restart				# Write restart file each x steps
+
+############### Run MD ###############
+timestep	0.15 						# Timestep in fs
+run		500000 					# Run MD for x steps
+write_data      data.Cvi_h					# Write last frame

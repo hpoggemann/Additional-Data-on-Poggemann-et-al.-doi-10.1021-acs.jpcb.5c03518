@@ -1,0 +1,46 @@
+# input for Short MD simulation based on SASA result 
+# ReaxFF simulation with fixed Fe in the heme because Fe is not part of the ff
+
+units		real 						# Define unit sys -> real is vital for reax
+atom_style	full 						# ReaxFF needs charge or full
+dimension       3
+boundary        p p p
+############### Read data ###############
+read_data	data.Cvi_300K_vac 					# Structure file
+############### Add molcecules ############### 
+molecule	mol h.mol					# Molecule that is added to system 
+create_atoms 	0 single 0.025 2.826 -23.8  mol mol 39802 	# SASA based position in which molecule is added
+############## Groups ###############
+group           heme id 3647 3648 3649 3650 3651 3720 	# Heme center Fe, and N
+group           S_cys id 309					# S_Cys connected to heme
+group           fix union heme S_cys				# Unite groups
+group           rest subtract all fix				# Rest of the system
+############### Force Filed ###############
+pair_style      reaxff NULL safezone 1.6 mincap 100 minhbonds 150
+pair_coeff      * * protein2013.ff H C N O S X X 		# ff, elements in the right order, X for Fe 
+fix             QEq all qeq/reax 1 0.0 10.0 1e-6 reaxff
+neighbor        2 bin
+neigh_modify    every 10 delay 0 check no
+############### Enviroment ###############
+fix		nve all nve 					# Thermodyn ensemble fix
+fix             langv all langevin 300.0 300.0 100.0 846321	# Thermostat fix
+############### Fix Fe and S ###############
+fix             freeze fix setforce 0.0 0.0 0.0
+velocity        fix set 0.0 0.0 0.0
+############### Thermolog ###############
+thermo 1
+############### Run energy minimization ###############
+dump            traj_em all custom 50 em_0.lmp id mol &
+		type element x y z vx vy vz q 		# Trajecory files
+dump_modify     traj_em element H C N O S Mg Fe # 		# Name elements in dump file correctly
+
+minimize 1.0e-4 1.0e-6 1000 10000				# Minimize
+write_data      data.em_0 					# Write last frame
+undump traj_em
+############### Run short MD ###############
+dump            traj_md all custom 50 traj_0.lmp id mol &
+		 type element x y z vx vy vz q 		# Trajecory files
+dump_modify     traj_md element H C N O S Mg Fe 		# Name elements in dump file correctly 	
+timestep	0.15						# Timestep in fs
+run 		500						# Run MD for x steps
+write_data      data.md_0					# Write last frame
